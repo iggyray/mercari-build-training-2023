@@ -1,7 +1,9 @@
 import os
 import logging
 import pathlib
-from fastapi import FastAPI, Form, HTTPException
+import json
+import hashlib
+from fastapi import FastAPI, Form, HTTPException, File, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,9 +25,51 @@ def root():
     return {"message": "Hello, world!"}
 
 @app.post("/items")
-def add_item(name: str = Form(...)):
-    logger.info(f"Receive item: {name}")
-    return {"message": f"item received: {name}"}
+async def add_item(name: str = Form(...), category: str = Form(...), image: UploadFile = File(...)):
+    logger.info(f"Receive item, name: {name}, category: {category}")
+
+    # hash image
+    imageContent = await image.read()
+    hashedImage = hashlib.sha256(imageContent).hexdigest()
+    hashedImageName = hashedImage + os.path.splitext(image.filename)[1]
+
+    # update items.json file
+    newItem = {
+        'name': name,
+        'category': category,
+        'image_filename': hashedImageName
+    }
+
+    with open("items.json", 'r') as itemsFile:
+        allItems = json.load(itemsFile)
+        if not "items" in allItems:
+            raise HTTPException(status_code=502, detail="items.json file is corrupted")
+        itemsFile.close()
+
+    allItems["items"].append(newItem) 
+
+    with open("items.json", 'w') as itemsFile:
+        json.dump(allItems, itemsFile)
+
+    return {"message": f"item received with name: {name}, category: {category}, image: {hashedImageName}"}
+
+@app.get("/items")
+def get_item():
+    with open('items.json') as f:
+        items = json.load(f)
+    return items
+
+@app.get("/items/{item_id}")
+def get_target_item(item_id: int):
+    with open('items.json') as f:
+        allItems = json.load(f)
+    
+    if item_id >= len(allItems["items"]):
+        raise HTTPException(status_code=404, detail="Item Id does not exist")
+
+    target = allItems["items"][item_id]
+    
+    return target
 
 @app.get("/image/{image_filename}")
 async def get_image(image_filename):
@@ -36,7 +80,7 @@ async def get_image(image_filename):
         raise HTTPException(status_code=400, detail="Image path does not end with .jpg")
 
     if not image.exists():
-        logger.debug(f"Image not found: {image}")
+        logger.warning(f"Image not found: {image}")
         image = images / "default.jpg"
 
     return FileResponse(image)
