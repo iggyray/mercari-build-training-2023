@@ -39,7 +39,7 @@ def getItems():
 def getDbItems():
     conn = sqlite3.connect(dataBase)
     cursor = conn.cursor()
-    getQuery = "SELECT * FROM items;"
+    getQuery = "SELECT name, category, image_name FROM items;"
     cursor.execute(getQuery)
     allItems = cursor.fetchall()
     return allItems
@@ -52,6 +52,23 @@ def postDbItem(name: str, category: str, image_name: str):
     cursor.execute(insertQuery, values)
     conn.commit()
     conn.close()
+
+def searchForDbItem(keyword: str):
+    conn = sqlite3.connect(dataBase)
+    cursor = conn.cursor()
+    searchQuery = f"SELECT name, category, image_name FROM items WHERE name LIKE ?"
+    cursor.execute(searchQuery, ('%' + keyword + '%',))
+    matches = cursor.fetchall()
+    return matches
+
+def formatItemsForReturn(allItems):
+    returnItems = []
+    
+    for item in allItems:
+        returnItem = { 'name': item[0], 'category': item[1], 'image_filename': item[2]  }
+        returnItems.append(returnItem)
+    
+    return returnItems
 
 async def hashImage(image: UploadFile = File(...)):
     imageContent = await image.read()
@@ -75,12 +92,16 @@ async def add_item(name: str = Form(...), category: str = Form(...), image: Uplo
 def get_items_reponse():
     allItems = getDbItems()
 
-    returnItems = []
+    returnItems = formatItemsForReturn(allItems)
     
-    for item in allItems:
-        returnItem = { 'name': item[1], 'category': item[2], 'image_filename': item[3]  }
-        returnItems.append(returnItem)
-    
+    return returnItems
+
+@app.get("/search")
+def get_searched_response(keyword: str):
+    matches = searchForDbItem(keyword)
+
+    returnItems = formatItemsForReturn(matches)
+
     return returnItems
 
 @app.get("/items/{item_id}")
