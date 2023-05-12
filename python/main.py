@@ -3,6 +3,7 @@ import logging
 import pathlib
 import json
 import hashlib
+import sqlite3
 from fastapi import FastAPI, Form, HTTPException, File, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +22,7 @@ app.add_middleware(
 )
 
 fileName = "items.json"
+dataBase = "mercari.sqlite3"
 
 def getItems():
     with open(fileName, 'r') as itemsFile:
@@ -33,6 +35,23 @@ def getItems():
         except:
             allItems = { 'items': [] }
     return allItems
+
+def getDbItems():
+    conn = sqlite3.connect(dataBase)
+    cursor = conn.cursor()
+    getQuery = "SELECT * FROM items;"
+    cursor.execute(getQuery)
+    allItems = cursor.fetchall()
+    return allItems
+
+def postDbItem(name: str, category: str, image_name: str):
+    conn = sqlite3.connect(dataBase)
+    cursor = conn.cursor()
+    insertQuery = "INSERT INTO items (name, category, image_name) VALUES (?, ?, ?)"
+    values = (name, category, image_name)
+    cursor.execute(insertQuery, values)
+    conn.commit()
+    conn.close()
 
 async def hashImage(image: UploadFile = File(...)):
     imageContent = await image.read()
@@ -48,23 +67,21 @@ async def add_item(name: str = Form(...), category: str = Form(...), image: Uplo
     logger.info(f"Receive item, name: {name}, category: {category}")
     
     hashedImageName = await hashImage(image)
-    newItem = {
-        'name': name,
-        'category': category,
-        'image_filename': hashedImageName
-    }
-    allItems = getItems()
-    allItems["items"].append(newItem)
-
-    with open(fileName, 'w') as itemsFile:
-        json.dump(allItems, itemsFile)
+    postDbItem(name, category, hashedImageName)
 
     return {"message": f"item received with name: {name}, category: {category}, image: {hashedImageName}"}
 
 @app.get("/items")
 def get_items_reponse():
-    allItems = getItems()
-    return allItems
+    allItems = getDbItems()
+
+    returnItems = []
+    
+    for item in allItems:
+        returnItem = { 'name': item[1], 'category': item[2], 'image_filename': item[3]  }
+        returnItems.append(returnItem)
+    
+    return returnItems
 
 @app.get("/items/{item_id}")
 def get_target_item(item_id: int):
