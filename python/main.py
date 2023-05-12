@@ -24,41 +24,48 @@ app.add_middleware(
 fileName = "items.json"
 dataBase = "mercari.sqlite3"
 
-def getItems():
-    with open(fileName, 'r') as itemsFile:
-        try:
-            file = json.load(itemsFile)
-            if "items" in file:
-                allItems = file
-            else:
-                allItems = { 'items': [] }
-        except:
-            allItems = { 'items': [] }
-    return allItems
-
 def getDbItems():
     conn = sqlite3.connect(dataBase)
     cursor = conn.cursor()
-    getQuery = "SELECT name, category, image_name FROM items;"
+    getQuery = "SELECT items.name, category.name, image_filename FROM items INNER JOIN category ON items.category_id = category.id;"
     cursor.execute(getQuery)
     allItems = cursor.fetchall()
+    conn.close()
     return allItems
 
 def postDbItem(name: str, category: str, image_name: str):
     conn = sqlite3.connect(dataBase)
     cursor = conn.cursor()
-    insertQuery = "INSERT INTO items (name, category, image_name) VALUES (?, ?, ?)"
-    values = (name, category, image_name)
-    cursor.execute(insertQuery, values)
-    conn.commit()
+    formattedCategory = category.lower()
+
+    getCategoryQuery = f"SELECT id FROM category WHERE name = ?"
+    cursor.execute(getCategoryQuery, (formattedCategory,))
+    categoryId = cursor.fetchone()
+    addItemQuery = "INSERT INTO items (name, category_id, image_filename) VALUES (?, ?, ?)"
+
+    if categoryId:
+        values = (name, categoryId[0], image_name)
+        cursor.execute(addItemQuery, values)
+        conn.commit()
+    else:
+        addCategoryQuery = "INSERT INTO category (name) VALUES (?)"
+        cursor.execute(addCategoryQuery, (formattedCategory,))
+        conn.commit()
+        cursor.execute(getCategoryQuery, (formattedCategory,))
+        newCategoryId = cursor.fetchone()
+        values = (name, newCategoryId[0], image_name)
+        cursor.execute(addItemQuery, values)
+        conn.commit()
+    
     conn.close()
 
 def searchForDbItem(keyword: str):
     conn = sqlite3.connect(dataBase)
     cursor = conn.cursor()
-    searchQuery = f"SELECT name, category, image_name FROM items WHERE name LIKE ?"
+    searchQuery = "SELECT items.name, category.name, image_filename FROM items INNER JOIN category ON items.category_id = category.id WHERE items.name LIKE ?"
     cursor.execute(searchQuery, ('%' + keyword + '%',))
     matches = cursor.fetchall()
+    conn.close()
     return matches
 
 def formatItemsForReturn(allItems):
@@ -91,18 +98,20 @@ async def add_item(name: str = Form(...), category: str = Form(...), image: Uplo
 @app.get("/items")
 def get_items_reponse():
     allItems = getDbItems()
-
-    returnItems = formatItemsForReturn(allItems)
-    
-    return returnItems
+    if len(allItems) > 0:
+        returnItems = formatItemsForReturn(allItems)
+        return returnItems
+    else:
+        return "database is empty"
 
 @app.get("/search")
 def get_searched_response(keyword: str):
     matches = searchForDbItem(keyword)
-
-    returnItems = formatItemsForReturn(matches)
-
-    return returnItems
+    if len(matches) > 0:
+        returnItems = formatItemsForReturn(matches)
+        return returnItems
+    else:
+        return f"No matches found for: {keyword}"
 
 @app.get("/items/{item_id}")
 def get_target_item(item_id: int):
