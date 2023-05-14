@@ -3,6 +3,7 @@ import logging
 import pathlib
 import json
 import hashlib
+import sqlite3
 from fastapi import FastAPI, Form, HTTPException, File, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,18 +22,60 @@ app.add_middleware(
 )
 
 fileName = "items.json"
+dataBase = "mercari.sqlite3"
 
-def getItems():
-    with open(fileName, 'r') as itemsFile:
-        try:
-            file = json.load(itemsFile)
-            if "items" in file:
-                allItems = file
-            else:
-                allItems = { 'items': [] }
-        except:
-            allItems = { 'items': [] }
+def getDbItems():
+    conn = sqlite3.connect(dataBase)
+    cursor = conn.cursor()
+    getQuery = "SELECT items.name, category.name, image_filename FROM items INNER JOIN category ON items.category_id = category.id;"
+    cursor.execute(getQuery)
+    allItems = cursor.fetchall()
+    conn.close()
     return allItems
+
+def postDbItem(name: str, category: str, image_name: str):
+    conn = sqlite3.connect(dataBase)
+    cursor = conn.cursor()
+    formattedCategory = category.lower()
+
+    getCategoryQuery = f"SELECT id FROM category WHERE name = ?"
+    cursor.execute(getCategoryQuery, (formattedCategory,))
+    categoryId = cursor.fetchone()
+    addItemQuery = "INSERT INTO items (name, category_id, image_filename) VALUES (?, ?, ?)"
+
+    if categoryId:
+        values = (name, categoryId[0], image_name)
+        cursor.execute(addItemQuery, values)
+        conn.commit()
+    else:
+        addCategoryQuery = "INSERT INTO category (name) VALUES (?)"
+        cursor.execute(addCategoryQuery, (formattedCategory,))
+        conn.commit()
+        cursor.execute(getCategoryQuery, (formattedCategory,))
+        newCategoryId = cursor.fetchone()
+        values = (name, newCategoryId[0], image_name)
+        cursor.execute(addItemQuery, values)
+        conn.commit()
+    
+    conn.close()
+
+def searchForDbItem(keyword: str):
+    conn = sqlite3.connect(dataBase)
+    cursor = conn.cursor()
+    searchQuery = "SELECT items.name, category.name, image_filename FROM items INNER JOIN category ON items.category_id = category.id WHERE items.name LIKE ?"
+    cursor.execute(searchQuery, ('%' + keyword + '%',))
+    matches = cursor.fetchall()
+    conn.close()
+    return matches
+
+def formatItemsForReturn(allItems):
+    returnItems = []
+    
+    for item in allItems:
+        returnItem = { 'name': item[0], 'category': item[1], 'image_filename': item[2]  }
+        returnItems.append(returnItem)
+    
+    return returnItems
 
 async def hashImage(image: UploadFile = File(...)):
     imageContent = await image.read()
@@ -44,27 +87,31 @@ def root():
     return {"message": "Hello, world!"}
 
 @app.post("/items")
-async def add_item(name: str = Form(...), category: str = Form(...), image: UploadFile = File(...)):
+async def addItem(name: str = Form(...), category: str = Form(...), image: UploadFile = File(...)):
     logger.info(f"Receive item, name: {name}, category: {category}")
     
     hashedImageName = await hashImage(image)
-    newItem = {
-        'name': name,
-        'category': category,
-        'image_filename': hashedImageName
-    }
-    allItems = getItems()
-    allItems["items"].append(newItem)
-
-    with open(fileName, 'w') as itemsFile:
-        json.dump(allItems, itemsFile)
+    postDbItem(name, category, hashedImageName)
 
     return {"message": f"item received with name: {name}, category: {category}, image: {hashedImageName}"}
 
 @app.get("/items")
-def get_items_reponse():
-    allItems = getItems()
-    return allItems
+def getAllItems():
+    allItems = getDbItems()
+    if len(allItems) > 0:
+        returnItems = formatItemsForReturn(allItems)
+        return returnItems
+    else:
+        raise HTTPException(status_code=404, detail="Database is empty")
+
+@app.get("/search")
+def getSearchedItem(keyword: str):
+    matches = searchForDbItem(keyword)
+    if len(matches) > 0:
+        returnItems = formatItemsForReturn(matches)
+        return returnItems
+    else:
+        raise HTTPException(status_code=404, detail=f"No matches found for: {keyword}")
 
 @app.get("/items/{item_id}")
 def get_target_item(item_id: int):
