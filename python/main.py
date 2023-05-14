@@ -87,7 +87,7 @@ def root():
     return {"message": "Hello, world!"}
 
 @app.post("/items")
-async def add_item(name: str = Form(...), category: str = Form(...), image: UploadFile = File(...)):
+async def addItem(name: str = Form(...), category: str = Form(...), image: UploadFile = File(...)):
     logger.info(f"Receive item, name: {name}, category: {category}")
     
     hashedImageName = await hashImage(image)
@@ -96,22 +96,22 @@ async def add_item(name: str = Form(...), category: str = Form(...), image: Uplo
     return {"message": f"item received with name: {name}, category: {category}, image: {hashedImageName}"}
 
 @app.get("/items")
-def get_items_reponse():
+def getAllItems():
     allItems = getDbItems()
     if len(allItems) > 0:
         returnItems = formatItemsForReturn(allItems)
         return returnItems
     else:
-        return "database is empty"
+        raise HTTPException(status_code=404, detail="Database is empty")
 
 @app.get("/search")
-def get_searched_response(keyword: str):
+def getSearchedItem(keyword: str):
     matches = searchForDbItem(keyword)
     if len(matches) > 0:
         returnItems = formatItemsForReturn(matches)
         return returnItems
     else:
-        return f"No matches found for: {keyword}"
+        raise HTTPException(status_code=404, detail=f"No matches found for: {keyword}")
 
 @app.get("/items/{item_id}")
 def get_target_item(item_id: int):
