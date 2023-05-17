@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 fileName = "items.json"
-dataBase = "mercari.sqlite3"
+dataBase = "/db/mercari.sqlite3"
 
 def getDbItems():
     conn = sqlite3.connect(dataBase)
