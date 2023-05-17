@@ -34,6 +34,7 @@ jobs:
       run: |
         echo 'Current path:'
         pwd
+        ls
         echo 'Tag: ${{ steps.meta.outputs.tags }}'
         echo 'Label: ${{ steps.meta.labels.tags }}'
 
