@@ -4,13 +4,13 @@ RUN addgroup -S mercari && adduser -S trainee -G mercari
 
 RUN apk add --no-cache python3 py3-pip
 
-COPY ../python/requirements.txt requirements.txt
+COPY ../mercari-build-training-2023/python/requirements.txt requirements.txt
 
 RUN pip3 install -r requirements.txt
 
-COPY ../python/main.py main.py
+COPY ../mercari-build-training-2023/python/main.py main.py
 
-COPY ../db/mercari.sqlite3 /db/mercari.sqlite3
+COPY ../mercari-build-training-2023/db/mercari.sqlite3 /db/mercari.sqlite3
 
 RUN chown -R trainee:mercari /db/mercari.sqlite3
 
