@@ -1,7 +1,6 @@
 FROM alpine
 
 RUN addgroup -S mercari && adduser -S trainee -G mercari
-# RUN chown -R trainee:mercari /path/to/db
 
 RUN apk add --no-cache python3 py3-pip
 
@@ -12,6 +11,8 @@ RUN pip3 install -r requirements.txt
 COPY main.py main.py
 
 COPY ./db/mercari.sqlite3 /db/mercari.sqlite3
+
+RUN chown -R trainee:mercari /db
 
 VOLUME /db
 
