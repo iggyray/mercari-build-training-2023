@@ -12,7 +12,6 @@ app = FastAPI()
 logger = logging.getLogger("uvicorn")
 logger.level = logging.INFO
 images = pathlib.Path(__file__).parent.resolve() / "images"
-dbPath = pathlib.Path(__file__).parent.resolve() / "db"
 origins = [ os.environ.get('FRONT_URL', 'http://localhost:3000') ]
 app.add_middleware(
     CORSMiddleware,
@@ -23,7 +22,7 @@ app.add_middleware(
 )
 
 fileName = "items.json"
-dataBase = dbPath / "mercari.sqlite3"
+dataBase = pathlib.Path(__file__).parent.resolve() / "db" / "mercari.sqlite3"
 
 def getDbItems():
     conn = sqlite3.connect(dataBase)
