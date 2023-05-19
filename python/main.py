@@ -7,6 +7,7 @@ import sqlite3
 from fastapi import FastAPI, Form, HTTPException, File, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 logger = logging.getLogger("uvicorn")
@@ -27,7 +28,7 @@ dataBase = pathlib.Path(__file__).parent.resolve() / "db" / "mercari.sqlite3"
 def getDbItems():
     conn = sqlite3.connect(dataBase)
     cursor = conn.cursor()
-    getQuery = "SELECT items.name, category.name, image_filename FROM items INNER JOIN category ON items.category_id = category.id;"
+    getQuery = "SELECT items.id, items.name, category.name, image_filename FROM items INNER JOIN category ON items.category_id = category.id;"
     cursor.execute(getQuery)
     allItems = cursor.fetchall()
     conn.close()
@@ -38,7 +39,7 @@ def postDbItem(name: str, category: str, image_name: str):
     cursor = conn.cursor()
     formattedCategory = category.lower()
 
-    getCategoryQuery = f"SELECT id FROM category WHERE name = ?"
+    getCategoryQuery = "SELECT id FROM category WHERE name = ?"
     cursor.execute(getCategoryQuery, (formattedCategory,))
     categoryId = cursor.fetchone()
     addItemQuery = "INSERT INTO items (name, category_id, image_filename) VALUES (?, ?, ?)"
@@ -56,8 +57,18 @@ def postDbItem(name: str, category: str, image_name: str):
         values = (name, newCategoryId[0], image_name)
         cursor.execute(addItemQuery, values)
         conn.commit()
-    
+
     conn.close()
+    
+
+def getLatestId():
+    conn = sqlite3.connect(dataBase)
+    cursor = conn.cursor()
+    getLatestQuery = "SELECT id FROM items ORDER BY id DESC LIMIT 1;"
+    cursor.execute(getLatestQuery)
+    addedId = cursor.fetchone()
+    return addedId[0]
+
 
 def searchForDbItem(keyword: str):
     conn = sqlite3.connect(dataBase)
@@ -69,18 +80,29 @@ def searchForDbItem(keyword: str):
     return matches
 
 def formatItemsForReturn(allItems):
-    returnItems = []
+    returnItems = { 'items': [] }
     
     for item in allItems:
-        returnItem = { 'name': item[0], 'category': item[1], 'image_filename': item[2]  }
-        returnItems.append(returnItem)
+        returnItem = { 'id': item[0], 'name': item[1], 'category': item[2], 'image_filename': item[3]  }
+        returnItems["items"].append(returnItem)
     
     return returnItems
 
-async def hashImage(image: UploadFile = File(...)):
-    imageContent = await image.read()
-    hashedImage = hashlib.sha256(imageContent).hexdigest()
-    return hashedImage + os.path.splitext(image.filename)[1]
+async def hashImage(imageBinary, imageExtension):
+    hashedImage = hashlib.sha256(imageBinary).hexdigest()
+    return hashedImage + imageExtension
+
+app.mount("/image", StaticFiles(directory="images"), name="image")
+
+async def uploadImage(itemId: int, imageBinary, imageExtension):
+    imageFileName = f"{itemId}{imageExtension}"
+    imagePath = images / imageFileName
+    try: 
+        with open(imagePath, "wb") as file:
+            file.write(imageBinary)
+            file.flush()
+    except Exception as e:
+        print(f"Error while writing the image file: {e}")
 
 @app.get("/")
 def root():
@@ -89,9 +111,13 @@ def root():
 @app.post("/items")
 async def addItem(name: str = Form(...), category: str = Form(...), image: UploadFile = File(...)):
     logger.info(f"Receive item, name: {name}, category: {category}")
-    
-    hashedImageName = await hashImage(image)
+
+    imageExtension = os.path.splitext(image.filename)[1]
+    imageBinary = await image.read()
+    hashedImageName = await hashImage(imageBinary, imageExtension)
     postDbItem(name, category, hashedImageName)
+    addedId = getLatestId()
+    await uploadImage(addedId, imageBinary, imageExtension)
 
     return {"message": f"item received with name: {name}, category: {category}, image: {hashedImageName}"}
 

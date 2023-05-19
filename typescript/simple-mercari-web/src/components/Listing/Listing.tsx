@@ -53,7 +53,7 @@ export const Listing: React.FC<Prop> = (props) => {
   };
   return (
     <div className='Listing'>
-      <form onSubmit={onSubmit}>
+      <form encType="multipart/form-data" onSubmit={onSubmit}>
         <div>
           <input type='text' name='name' id='name' placeholder='name' onChange={onValueChange} required />
           <input type='text' name='category' id='category' placeholder='category' onChange={onValueChange} />
