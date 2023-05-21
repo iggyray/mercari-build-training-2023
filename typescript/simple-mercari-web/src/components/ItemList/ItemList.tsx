@@ -46,9 +46,7 @@ export const ItemList: React.FC<Prop> = (props) => {
   return (
     <div className="wrapper">
       {items.map((item) => {
-        const itemId = item.id
-        console.log(itemId)
-        const imgSrc = `http://localhost:9000/image/${itemId}.jpg`
+        const imgSrc = server.concat("/image/", item.id.toString(), ".jpg")
         console.log(imgSrc)
         return (
           <div key={item.id} className="ItemList">
